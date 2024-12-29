@@ -4,39 +4,50 @@ import time
 import csv
 import os
 
-api_id = 954660
-api_hash = "722f3cedf17305b3955a545b28b53995"
+# Constants
+API_ID = 954660
+API_HASH = "722f3cedf17305b3955a545b28b53995"
+SESSIONS_DIR = "sessions"
+CSV_FILE = "accounts.csv"
+DEFAULT_PHONE = "9315988300"
 
-if not os.path.exists("sessions"):
-    os.makedirs("sessions")
+# Color codes for status messages
+GREEN = "\033[92m"
+RED = "\033[91m"
+YELLOW = "\033[93m"
+RESET = "\033[0m"
+
+# Create sessions directory
+if not os.path.exists(SESSIONS_DIR):
+    os.makedirs(SESSIONS_DIR)
 
 def load_accounts():
+    """Load phone numbers from CSV file or create a default one if not exists"""
     accounts = []
     try:
-        with open('accounts.csv', 'r') as file:
+        with open(CSV_FILE, 'r') as file:
             csv_reader = csv.reader(file)
-            next(csv_reader)
+            next(csv_reader)  # Skip header
             for row in csv_reader:
                 if row:
                     phone = row[0].strip()
-                    if phone.startswith('91'):
-                        accounts.append({"phone": phone})
-                    else:
-                        accounts.append({"phone": f"91{phone}"})
+                    phone = phone if phone.startswith('91') else f"91{phone}"
+                    accounts.append({"phone": phone})
         return accounts
     except FileNotFoundError:
-        print("accounts.csv not found. Creating a sample file...")
-        with open('accounts.csv', 'w', newline='') as file:
+        print(f"{CSV_FILE} not found. Creating a sample file...")
+        with open(CSV_FILE, 'w', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(['phone'])
-            writer.writerow(['9315988300'])
-        return [{'phone': '919315988300'}]
+            writer.writerow([DEFAULT_PHONE])
+        return [{'phone': f"91{DEFAULT_PHONE}"}]
 
 def login_to_telegram(phone_number):
+    """Initialize and start Telegram client for a given phone number"""
     client = Client(
-        name=f"sessions/session_{phone_number}",
-        api_id=api_id,
-        api_hash=api_hash,
+        name=f"{SESSIONS_DIR}/session_{phone_number}",
+        api_id=API_ID,
+        api_hash=API_HASH,
         phone_number=phone_number
     )
 
@@ -47,36 +58,43 @@ def login_to_telegram(phone_number):
         print(f"Error logging in to {phone_number}: {e}")
         return None
 
+def send_message_with_status(client, target_username):
+    """Send message and display status with color coding"""
+    try:
+        phone = client.get_me().phone_number
+        print(f"Sending message from {phone} to @{target_username}...", end=" ")
+        client.send_message(target_username, "Hello!")
+        print(f"{GREEN}{{done}}{RESET}")
+        time.sleep(1)
+    except PeerIdInvalid:
+        print(f"{RED}{{failed - Invalid username}}{RESET}")
+    except FloodWait as e:
+        print(f"{YELLOW}{{delayed - waiting {e.x}s}}{RESET}")
+        time.sleep(e.x)
+        try:
+            client.send_message(target_username, "Hello!")
+            print(f"Sending message from {phone} to @{target_username}... {GREEN}{{done}}{RESET}")
+        except:
+            print(f"Sending message from {phone} to @{target_username}... {RED}{{failed}}{RESET}")
+    except Exception as e:
+        print(f"{RED}{{failed - {str(e)}}}{RESET}")
+
 def send_hello_message(target_username):
+    """Main function to handle client initialization and message sending"""
     clients = []
     accounts = load_accounts()
 
+    # Initialize clients
     for account in accounts:
-        print(f"Logging in to account: {account['phone']}")
+        print(f"Logging in to account: {account['phone']}", end=" ")
         client = login_to_telegram(account["phone"])
         if client:
             clients.append(client)
-            print(f"Successfully logged in to {account['phone']}")
+            print(f"{GREEN}{{Success}}{RESET}")
 
+    # Send messages
     for client in clients:
-        try:
-            phone = client.get_me().phone_number
-            print(f"Sending message from {phone} to @{target_username}...", end=" ")
-            client.send_message(target_username, "Hello!")
-            print("\033[92m{done}\033[0m")  # Green color for success
-            time.sleep(1)
-        except PeerIdInvalid:
-            print("\033[91m{failed - Invalid username}\033[0m")  # Red color for failure
-        except FloodWait as e:
-            print(f"\033[93m{{delayed - waiting {e.x}s}}\033[0m")  # Yellow for delay
-            time.sleep(e.x)
-            try:
-                client.send_message(target_username, "Hello!")
-                print(f"Sending message from {phone} to @{target_username}... \033[92m{done}\033[0m")
-            except:
-                print(f"Sending message from {phone} to @{target_username}... \033[91m{failed}\033[0m")
-        except Exception as e:
-            print(f"\033[91m{{failed - {str(e)}}}\033[0m")  # Red color with error message
+        send_message_with_status(client, target_username)
 
 if __name__ == "__main__":
     target_username = input("Enter the username you want to send 'Hello' to (without @): ")
