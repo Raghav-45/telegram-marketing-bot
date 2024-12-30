@@ -1,15 +1,11 @@
-from pyrogram import Client
+from pyrogram import Client, filters
 from pyrogram.errors import PeerIdInvalid, FloodWait, InviteHashExpired, UsernameNotOccupied
 import time
-import csv
-import os
 
 # Constants
 API_ID = 954660
 API_HASH = "722f3cedf17305b3955a545b28b53995"
-SESSIONS_DIR = "sessions"
-CSV_FILE = "accounts.csv"
-DEFAULT_PHONE = "9315988300"
+BOT_TOKEN = "6652489556:AAFfNjVvXEOwVqLBulDpSvMQfmSgYVf-44U"  # Replace with your bot token
 
 # Color codes for status messages
 GREEN = "\033[92m"
@@ -17,152 +13,112 @@ RED = "\033[91m"
 YELLOW = "\033[93m"
 RESET = "\033[0m"
 
-# Create sessions directory
-if not os.path.exists(SESSIONS_DIR):
-    os.makedirs(SESSIONS_DIR)
+# Initialize the bot
+bot = Client(
+    name="my_bot",
+    api_id=API_ID,
+    api_hash=API_HASH,
+    bot_token=BOT_TOKEN
+)
 
-def load_accounts():
-    """Load phone numbers from CSV file or create a default one if not exists"""
-    accounts = []
+@bot.on_message(filters.command("start"))
+def start_command(client, message):
+    """Handle the /start command"""
+    message.reply("Welcome! I'm your bot. Use /sendmessage <username> to send a message, or /joingroup <link or username> to join a group.")
+    
+@bot.on_message(filters.command("sendmessage"))
+def send_message(client, message):
+    """Handle the /sendmessage command"""
     try:
-        with open(CSV_FILE, 'r') as file:
-            csv_reader = csv.reader(file)
-            next(csv_reader)  # Skip header
-            for row in csv_reader:
-                if row:
-                    phone = row[0].strip()
-                    phone = phone if phone.startswith('91') else f"91{phone}"
-                    accounts.append({"phone": phone})
-        return accounts
-    except FileNotFoundError:
-        print(f"{CSV_FILE} not found. Creating a sample file...")
-        with open(CSV_FILE, 'w', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow(['phone'])
-            writer.writerow([DEFAULT_PHONE])
-        return [{'phone': f"91{DEFAULT_PHONE}"}]
-
-def login_to_telegram(phone_number):
-    """Initialize and start Telegram client for a given phone number"""
-    try:
-        client = Client(
-            name=f"{SESSIONS_DIR}/session_{phone_number}",
-            api_id=API_ID,
-            api_hash=API_HASH,
-            phone_number=phone_number
-        )
-        client.start()
-        time.sleep(0.5)  # Add small delay between client starts
-        return client
-    except Exception as e:
-        print(f"{RED}{{failed - {str(e)}}}{RESET}")
-        return None
-
-def join_group(client, group_link):
-    """Join a group using invite link or username"""
-    try:
-        phone = client.get_me().phone_number
-        print(f"Joining group with {phone}...", end=" ")
-        
-        if group_link.startswith('https://t.me/'):
-            identifier = group_link.split('/')[-1]
-        else:
-            identifier = group_link.lstrip('@')
-        
-        client.join_chat(identifier)
-        print(f"{GREEN}{{joined}}{RESET}")
-        time.sleep(2)  # Increased delay between joins
-    except InviteHashExpired:
-        print(f"{RED}{{failed - Invite link expired}}{RESET}")
-    except UsernameNotOccupied:
-        print(f"{RED}{{failed - Invalid username}}{RESET}")
-    except FloodWait as e:
-        print(f"{YELLOW}{{delayed - waiting {e.x}s}}{RESET}")
-        time.sleep(e.x)
-        try:
-            client.join_chat(identifier)
-            print(f"{GREEN}{{joined}}{RESET}")
-        except:
-            print(f"{RED}{{failed}}{RESET}")
-    except Exception as e:
-        print(f"{RED}{{failed - {str(e)}}}{RESET}")
-    finally:
-        time.sleep(1)  # Ensure delay after each join attempt
-
-def send_message_with_status(client, target_username):
-    """Send message and display status with color coding"""
-    try:
-        phone = client.get_me().phone_number
-        print(f"Sending message from {phone} to @{target_username}...", end=" ")
-        client.send_message(target_username, "Hello!")
-        print(f"{GREEN}{{done}}{RESET}")
-        time.sleep(2)  # Increased delay between messages
+        # Extract username from the command
+        target_username = message.text.split(" ", 1)[1].lstrip('@')
+        print(f"Sending message to @{target_username}...", end=" ")
+        bot.send_message(target_username, "Hello!")
+        message.reply(f"{GREEN}Message sent to @{target_username}!{RESET}")
+    except IndexError:
+        message.reply("Please provide a username after the command.")
     except PeerIdInvalid:
-        print(f"{RED}{{failed - Invalid username}}{RESET}")
+        message.reply("Invalid username. Could not send message.")
     except FloodWait as e:
-        print(f"{YELLOW}{{delayed - waiting {e.x}s}}{RESET}")
+        message.reply(f"{YELLOW}Delayed - waiting {e.x}s...{RESET}")
         time.sleep(e.x)
         try:
-            client.send_message(target_username, "Hello!")
-            print(f"{GREEN}{{done}}{RESET}")
+            bot.send_message(target_username, "Hello!")
+            message.reply(f"{GREEN}Message sent to @{target_username}!{RESET}")
         except:
-            print(f"{RED}{{failed}}{RESET}")
+            message.reply(f"{RED}Failed to send message.{RESET}")
     except Exception as e:
-        print(f"{RED}{{failed - {str(e)}}}{RESET}")
-    finally:
-        time.sleep(1)  # Ensure delay after each message attempt
+        message.reply(f"Error: {str(e)}")
 
-def process_clients(action, target):
-    """Process all clients with proper cleanup"""
-    clients = []
-    accounts = load_accounts()
+# def send_message_with_status(bot, target_username):
+#     """Send message and display status with color coding"""
+#     try:
+#         print(f"Sending message to @{target_username}...", end=" ")
+#         bot.send_message(target_username, "Hello!")
+#         print(f"{GREEN}{{done}}{RESET}")
+#     except PeerIdInvalid:
+#         print(f"{RED}{{failed - Invalid username}}{RESET}")
+#     except FloodWait as e:
+#         print(f"{YELLOW}{{delayed - waiting {e.x}s}}{RESET}")
+#         time.sleep(e.x)
+#         try:
+#             bot.send_message(target_username, "Hello!")
+#             print(f"{GREEN}{{done}}{RESET}")
+#         except:
+#             print(f"{RED}{{failed}}{RESET}")
+#     except Exception as e:
+#         print(f"{RED}{{failed - {str(e)}}}{RESET}")
 
-    # Login phase
-    for account in accounts:
-        print(f"Logging in to account: {account['phone']}", end=" ")
-        client = login_to_telegram(account["phone"])
-        if client:
-            clients.append(client)
-            print(f"{GREEN}{{Success}}{RESET}")
-            time.sleep(1)  # Delay between logins
-
-    # Action phase
-    try:
-        for client in clients:
-            if action == "message":
-                send_message_with_status(client, target)
-            elif action == "join":
-                join_group(client, target)
-    finally:
-        # Cleanup phase
-        for client in clients:
-            try:
-                client.stop()
-            except:
-                pass
-            time.sleep(0.5)  # Delay between client stops
+# def join_group(bot, group_link):
+#     """Join a group using invite link or username"""
+#     try:
+#         print(f"Joining group...", end=" ")
+        
+#         if group_link.startswith('https://t.me/'):
+#             identifier = group_link.split('/')[-1]
+#         else:
+#             identifier = group_link.lstrip('@')
+        
+#         bot.join_chat(identifier)
+#         print(f"{GREEN}{{joined}}{RESET}")
+#     except InviteHashExpired:
+#         print(f"{RED}{{failed - Invite link expired}}{RESET}")
+#     except UsernameNotOccupied:
+#         print(f"{RED}{{failed - Invalid username}}{RESET}")
+#     except FloodWait as e:
+#         print(f"{YELLOW}{{delayed - waiting {e.x}s}}{RESET}")
+#         time.sleep(e.x)
+#         try:
+#             bot.join_chat(identifier)
+#             print(f"{GREEN}{{joined}}{RESET}")
+#         except:
+#             print(f"{RED}{{failed}}{RESET}")
+#     except Exception as e:
+#         print(f"{RED}{{failed - {str(e)}}}{RESET}")
 
 def main():
     """Main function to handle user input and operations"""
-    while True:
-        print("\nOptions:")
-        print("1. Send message to user")
-        print("2. Join group")
-        print("3. Exit")
-        
-        choice = input("Enter your choice (1-3): ")
-        
-        if choice == "1":
-            target_username = input("Enter the username to send message (without @): ")
-            process_clients("message", target_username)
-        elif choice == "2":
-            group_link = input("Enter group link or @ username: ")
-            process_clients("join", group_link)
-        elif choice == "3":
-            print("Exiting program...")
-            break
-        else:
-            print(f"{RED}Invalid choice. Please try again.{RESET}")
+    bot.run()
+
+        # while True:
+        #     print("\nOptions:")
+        #     print("1. Send message to user")
+        #     print("2. Join group")
+        #     print("3. Exit")
+            
+        #     choice = input("Enter your choice (1-3): ")
+            
+        #     if choice == "1":
+        #         target_username = input("Enter the username to send message (without @): ")
+        #         send_message_with_status(bot, target_username)
+        #     elif choice == "2":
+        #         group_link = input("Enter group link or @ username: ")
+        #         join_group(bot, group_link)
+        #     elif choice == "3":
+        #         print("Exiting program...")
+        #         break
+        #     else:
+        #         print(f"{RED}Invalid choice. Please try again.{RESET}")
 
 if __name__ == "__main__":
     main()
