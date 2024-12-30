@@ -88,6 +88,38 @@ def join_group(client, group_link):
         print(f"{RED}{{failed - {str(e)}}}{RESET}")
     finally:
         time.sleep(1)  # Ensure delay after each join attempt
+        
+def read_chats(client, group_link):
+    """Join a group using invite link or username"""
+    # try:
+    phone = client.get_me().phone_number
+    print(f"Reading chats with {phone}...", end=" ")
+    
+    if group_link.startswith('https://t.me/'):
+        identifier = group_link.split('/')[-1]
+    else:
+        identifier = group_link.lstrip('@')
+    
+    chat = client.get_chat(identifier)
+    client.read_chat_history(chat.id)
+    print(f"{GREEN}{chat.id}{RESET}")
+    time.sleep(2)  # Increased delay between joins
+    # except InviteHashExpired:
+    #     print(f"{RED}{{failed - Invite link expired}}{RESET}")
+    # except UsernameNotOccupied:
+    #     print(f"{RED}{{failed - Invalid username}}{RESET}")
+    # except FloodWait as e:
+    #     print(f"{YELLOW}{{delayed - waiting {e.x}s}}{RESET}")
+    #     time.sleep(e.x)
+    #     try:
+    #         client.join_chat(identifier)
+    #         print(f"{GREEN}{{joined}}{RESET}")
+    #     except:
+    #         print(f"{RED}{{failed}}{RESET}")
+    # except Exception as e:
+    #     print(f"{RED}{{failed - {str(e)}}}{RESET}")
+    # finally:
+    #     time.sleep(1)  # Ensure delay after each join attempt
 
 def send_message_with_status(client, target_username):
     """Send message and display status with color coding"""
@@ -133,6 +165,8 @@ def process_clients(action, target):
                 send_message_with_status(client, target)
             elif action == "join":
                 join_group(client, target)
+            elif action == "read_chats":
+                read_chats(client, target)
     finally:
         # Cleanup phase
         for client in clients:
@@ -148,9 +182,10 @@ def main():
         print("\nOptions:")
         print("1. Send message to user")
         print("2. Join group")
-        print("3. Exit")
+        print("3. Read chats")
+        print("4. Exit")
         
-        choice = input("Enter your choice (1-3): ")
+        choice = input("Enter your choice (1-4): ")
         
         if choice == "1":
             target_username = input("Enter the username to send message (without @): ")
@@ -159,6 +194,9 @@ def main():
             group_link = input("Enter group link or @ username: ")
             process_clients("join", group_link)
         elif choice == "3":
+            group_link = input("Enter group link or @ username: ")
+            process_clients("read_chats", group_link)
+        elif choice == "4":
             print("Exiting program...")
             break
         else:
