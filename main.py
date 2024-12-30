@@ -104,22 +104,6 @@ def read_chats(client, group_link):
     client.read_chat_history(chat.id)
     print(f"{GREEN}{chat.id}{RESET}")
     time.sleep(2)  # Increased delay between joins
-    # except InviteHashExpired:
-    #     print(f"{RED}{{failed - Invite link expired}}{RESET}")
-    # except UsernameNotOccupied:
-    #     print(f"{RED}{{failed - Invalid username}}{RESET}")
-    # except FloodWait as e:
-    #     print(f"{YELLOW}{{delayed - waiting {e.x}s}}{RESET}")
-    #     time.sleep(e.x)
-    #     try:
-    #         client.join_chat(identifier)
-    #         print(f"{GREEN}{{joined}}{RESET}")
-    #     except:
-    #         print(f"{RED}{{failed}}{RESET}")
-    # except Exception as e:
-    #     print(f"{RED}{{failed - {str(e)}}}{RESET}")
-    # finally:
-    #     time.sleep(1)  # Ensure delay after each join attempt
 
 def send_message_with_status(client, target_username):
     """Send message and display status with color coding"""
