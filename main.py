@@ -1,5 +1,5 @@
 from pyrogram import Client
-from pyrogram.errors import PeerIdInvalid, FloodWait
+from pyrogram.errors import PeerIdInvalid, FloodWait, InviteHashExpired, UsernameNotOccupied
 import time
 import csv
 import os
@@ -44,19 +44,50 @@ def load_accounts():
 
 def login_to_telegram(phone_number):
     """Initialize and start Telegram client for a given phone number"""
-    client = Client(
-        name=f"{SESSIONS_DIR}/session_{phone_number}",
-        api_id=API_ID,
-        api_hash=API_HASH,
-        phone_number=phone_number
-    )
-
     try:
+        client = Client(
+            name=f"{SESSIONS_DIR}/session_{phone_number}",
+            api_id=API_ID,
+            api_hash=API_HASH,
+            phone_number=phone_number
+        )
         client.start()
+        time.sleep(0.5)  # Add small delay between client starts
         return client
     except Exception as e:
-        print(f"Error logging in to {phone_number}: {e}")
+        print(f"{RED}{{failed - {str(e)}}}{RESET}")
         return None
+
+def join_group(client, group_link):
+    """Join a group using invite link or username"""
+    try:
+        phone = client.get_me().phone_number
+        print(f"Joining group with {phone}...", end=" ")
+        
+        if group_link.startswith('https://t.me/'):
+            identifier = group_link.split('/')[-1]
+        else:
+            identifier = group_link.lstrip('@')
+        
+        client.join_chat(identifier)
+        print(f"{GREEN}{{joined}}{RESET}")
+        time.sleep(2)  # Increased delay between joins
+    except InviteHashExpired:
+        print(f"{RED}{{failed - Invite link expired}}{RESET}")
+    except UsernameNotOccupied:
+        print(f"{RED}{{failed - Invalid username}}{RESET}")
+    except FloodWait as e:
+        print(f"{YELLOW}{{delayed - waiting {e.x}s}}{RESET}")
+        time.sleep(e.x)
+        try:
+            client.join_chat(identifier)
+            print(f"{GREEN}{{joined}}{RESET}")
+        except:
+            print(f"{RED}{{failed}}{RESET}")
+    except Exception as e:
+        print(f"{RED}{{failed - {str(e)}}}{RESET}")
+    finally:
+        time.sleep(1)  # Ensure delay after each join attempt
 
 def send_message_with_status(client, target_username):
     """Send message and display status with color coding"""
@@ -65,7 +96,7 @@ def send_message_with_status(client, target_username):
         print(f"Sending message from {phone} to @{target_username}...", end=" ")
         client.send_message(target_username, "Hello!")
         print(f"{GREEN}{{done}}{RESET}")
-        time.sleep(1)
+        time.sleep(2)  # Increased delay between messages
     except PeerIdInvalid:
         print(f"{RED}{{failed - Invalid username}}{RESET}")
     except FloodWait as e:
@@ -73,29 +104,65 @@ def send_message_with_status(client, target_username):
         time.sleep(e.x)
         try:
             client.send_message(target_username, "Hello!")
-            print(f"Sending message from {phone} to @{target_username}... {GREEN}{{done}}{RESET}")
+            print(f"{GREEN}{{done}}{RESET}")
         except:
-            print(f"Sending message from {phone} to @{target_username}... {RED}{{failed}}{RESET}")
+            print(f"{RED}{{failed}}{RESET}")
     except Exception as e:
         print(f"{RED}{{failed - {str(e)}}}{RESET}")
+    finally:
+        time.sleep(1)  # Ensure delay after each message attempt
 
-def send_hello_message(target_username):
-    """Main function to handle client initialization and message sending"""
+def process_clients(action, target):
+    """Process all clients with proper cleanup"""
     clients = []
     accounts = load_accounts()
 
-    # Initialize clients
+    # Login phase
     for account in accounts:
         print(f"Logging in to account: {account['phone']}", end=" ")
         client = login_to_telegram(account["phone"])
         if client:
             clients.append(client)
             print(f"{GREEN}{{Success}}{RESET}")
+            time.sleep(1)  # Delay between logins
 
-    # Send messages
-    for client in clients:
-        send_message_with_status(client, target_username)
+    # Action phase
+    try:
+        for client in clients:
+            if action == "message":
+                send_message_with_status(client, target)
+            elif action == "join":
+                join_group(client, target)
+    finally:
+        # Cleanup phase
+        for client in clients:
+            try:
+                client.stop()
+            except:
+                pass
+            time.sleep(0.5)  # Delay between client stops
+
+def main():
+    """Main function to handle user input and operations"""
+    while True:
+        print("\nOptions:")
+        print("1. Send message to user")
+        print("2. Join group")
+        print("3. Exit")
+        
+        choice = input("Enter your choice (1-3): ")
+        
+        if choice == "1":
+            target_username = input("Enter the username to send message (without @): ")
+            process_clients("message", target_username)
+        elif choice == "2":
+            group_link = input("Enter group link or @ username: ")
+            process_clients("join", group_link)
+        elif choice == "3":
+            print("Exiting program...")
+            break
+        else:
+            print(f"{RED}Invalid choice. Please try again.{RESET}")
 
 if __name__ == "__main__":
-    target_username = input("Enter the username you want to send 'Hello' to (without @): ")
-    send_hello_message(target_username)
+    main()
