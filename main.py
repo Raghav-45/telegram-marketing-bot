@@ -1,55 +1,132 @@
 from pyrogram import Client
-from pyrogram.errors import FloodWait
-from pyrogram.raw import functions
+from pyrogram.errors import PeerIdInvalid, FloodWait, InviteHashExpired, UsernameNotOccupied
 import time
 import csv
 import os
 
+# Constants
 API_ID = 954660
 API_HASH = "722f3cedf17305b3955a545b28b53995"
 SESSIONS_DIR = "sessions"
 CSV_FILE = "accounts.csv"
+DEFAULT_PHONE = "9315988300"
 
+# Color codes for status messages
 GREEN = "\033[92m"
 RED = "\033[91m"
 YELLOW = "\033[93m"
 RESET = "\033[0m"
 
+# Create sessions directory
 if not os.path.exists(SESSIONS_DIR):
     os.makedirs(SESSIONS_DIR)
 
+# Global variable to store loaded accounts
+accounts = []
+
 def load_accounts():
-    accounts = []
+    """Load phone numbers from CSV file or create a default one if not exists"""
+    global accounts  # Use global variable to store accounts
     try:
         with open(CSV_FILE, 'r') as file:
             csv_reader = csv.reader(file)
-            next(csv_reader)
+            next(csv_reader)  # Skip header
             for row in csv_reader:
                 if row:
                     phone = row[0].strip()
                     phone = phone if phone.startswith('91') else f"91{phone}"
                     accounts.append({"phone": phone})
-        print(f"{GREEN}{len(accounts)} Accounts loaded{RESET}")
-        return accounts
+        print(f"{GREEN}{len(accounts)} Accounts loaded successfully!{RESET}")
     except FileNotFoundError:
-        print(f"{RED}{CSV_FILE} not found. Create it with phone numbers.{RESET}")
-        return []
+        print(f"{RED}{CSV_FILE} not found. Creating a sample file...{RESET}")
+        with open(CSV_FILE, 'w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(['phone'])
+            writer.writerow([DEFAULT_PHONE])
+        accounts = [{'phone': f"91{DEFAULT_PHONE}"}]
+        print(f"{GREEN}Sample file created with default account!{RESET}")
 
-def login_account(phone_number):
+def login_to_telegram(phone_number):
+    """Initialize and start Telegram client for a given phone number"""
     try:
         client = Client(
-            f"{SESSIONS_DIR}/session_{phone_number}",
+            name=f"{SESSIONS_DIR}/session_{phone_number}",
             api_id=API_ID,
             api_hash=API_HASH,
             phone_number=phone_number
         )
         client.start()
+        time.sleep(0.5)  # Add small delay between client starts
         return client
     except Exception as e:
-        print(f"{RED}Login failed for {phone_number}: {str(e)}{RESET}")
+        print(f"{RED}{{failed - {str(e)}}}{RESET}")
         return None
 
-def mark_channel_read(client, channel_id):
+def login_all_clients():
+    """Log in all clients."""
+    clients = []
+    
+    # Login phase (only once after accounts are loaded)
+    for account in accounts:
+        print(f"Logging in to account: {account['phone']}", end=" ")
+        client = login_to_telegram(account["phone"])
+        if client:
+            clients.append(client)
+            print(f"{GREEN}{{Success}}{RESET}")
+            time.sleep(1)  # Delay between logins
+        else:
+            print(f"{RED}{{Failed to log in}}{RESET}")
+
+    return clients
+
+def join_group(client, group_link):
+    """Join a group using invite link or username"""
+    try:
+        phone = client.get_me().phone_number
+        print(f"Joining group with {phone}...", end=" ")
+        
+        if group_link.startswith('https://t.me/'):
+            identifier = group_link.split('/')[-1]
+        else:
+            identifier = group_link.lstrip('@')
+        
+        client.join_chat(identifier)
+        print(f"{GREEN}{{joined}}{RESET}")
+        time.sleep(2)  # Increased delay between joins
+    except InviteHashExpired:
+        print(f"{RED}{{failed - Invite link expired}}{RESET}")
+    except UsernameNotOccupied:
+        print(f"{RED}{{failed - Invalid username}}{RESET}")
+    except FloodWait as e:
+        print(f"{YELLOW}{{delayed - waiting {e.x}s}}{RESET}")
+        time.sleep(e.x)
+        try:
+            client.join_chat(identifier)
+            print(f"{GREEN}{{joined}}{RESET}")
+        except:
+            print(f"{RED}{{failed}}{RESET}")
+    except Exception as e:
+        print(f"{RED}{{failed - {str(e)}}}{RESET}")
+    finally:
+        time.sleep(1)  # Ensure delay after each join attempt
+
+def mark_group_as_read(client, group_link):
+    """Join a group using invite link or username"""
+    # try:
+    phone = client.get_me().phone_number
+    print(f"Reading chats with {phone}...", end=" ")
+    
+    if group_link.startswith('https://t.me/'):
+        identifier = group_link.split('/')[-1]
+    else:
+        identifier = group_link.lstrip('@')
+    
+    chat = client.get_chat(identifier)
+    client.read_chat_history(chat.id)
+    print(f"{GREEN}{chat.id}{RESET}")
+    time.sleep(2)  # Increased delay between joins
+
+def mark_channel_as_read(client, channel_id):
     try:
         phone = client.get_me().phone_number
         print(f"Marking channel messages read for {phone}...", end=" ")
@@ -91,30 +168,35 @@ def mark_channel_read(client, channel_id):
         print(f"{RED}Failed: {str(e)}{RESET}")
     time.sleep(2)
 
+
+
+
 def main():
-    accounts = load_accounts()
+    load_accounts()
     if not accounts:
         return
 
     clients = []
-    print("\nLogging in to accounts...")
-    for account in accounts:
-        client = login_account(account["phone"])
-        if client:
-            clients.append(client)
-            time.sleep(1)
 
     while True:
         print("\nOptions:")
-        print("1. Mark channel messages as read")
-        print("2. Exit")
+        print("1. Login Clients")
+        print("2. Join group")
+        print("3. Read chats")
+        print("4. Mark channel messages as read")
+        print("5. Send message to user")
+        print("6. Exit")
         
-        choice = input("Choice (1-2): ")
+        choice = input("Enter your choice (1-6): ")
         
         if choice == "1":
-            channel = input("Enter channel username or link: ")
-            for client in clients:
-                mark_channel_read(client, channel)
+            # Login clients
+            print(f"\n{GREEN}Logging in all clients...{RESET}")
+            clients = login_all_clients()  # Log in clients manually
+            if clients:
+                print(f"{GREEN}All clients are logged in successfully.{RESET}")
+            else:
+                print(f"{RED}No clients logged in.{RESET}")
         elif choice == "2":
             print("Exiting...")
             for client in clients:
