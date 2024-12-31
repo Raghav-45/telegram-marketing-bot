@@ -109,8 +109,8 @@ def join_group(client, group_link):
         print(f"{RED}{{failed - {str(e)}}}{RESET}")
     finally:
         time.sleep(1)  # Ensure delay after each join attempt
-        
-def read_chats(client, group_link):
+
+def mark_group_as_read(client, group_link):
     """Join a group using invite link or username"""
     # try:
     phone = client.get_me().phone_number
@@ -126,79 +126,68 @@ def read_chats(client, group_link):
     print(f"{GREEN}{chat.id}{RESET}")
     time.sleep(2)  # Increased delay between joins
 
-def send_message_with_status(client, target_username):
-    """Send message and display status with color coding"""
+def mark_channel_as_read(client, channel_id):
     try:
         phone = client.get_me().phone_number
-        print(f"Sending message from {phone} to @{target_username}...", end=" ")
-        client.send_message(target_username, "Hello!")
-        print(f"{GREEN}{{done}}{RESET}")
-        time.sleep(2)  # Increased delay between messages
-    except PeerIdInvalid:
-        print(f"{RED}{{failed - Invalid username}}{RESET}")
-    except FloodWait as e:
-        print(f"{YELLOW}{{delayed - waiting {e.x}s}}{RESET}")
-        time.sleep(e.x)
-        try:
-            client.send_message(target_username, "Hello!")
-            print(f"{GREEN}{{done}}{RESET}")
-        except:
-            print(f"{RED}{{failed}}{RESET}")
-    except Exception as e:
-        print(f"{RED}{{failed - {str(e)}}}{RESET}")
-    finally:
-        time.sleep(1)  # Ensure delay after each message attempt
-
-def login_all_clients():
-    """Log in all clients manually."""
-    clients = []
-    
-    # Login phase (only once after accounts are loaded)
-    for account in accounts:
-        print(f"Logging in to account: {account['phone']}", end=" ")
-        client = login_to_telegram(account["phone"])
-        if client:
-            clients.append(client)
-            print(f"{GREEN}{{Success}}{RESET}")
-            # time.sleep(1)  # Delay between logins
+        print(f"Marking channel messages read for {phone}...", end=" ")
+        
+        # Get channel entity
+        channel = client.get_chat(channel_id)
+        channel_peer = client.resolve_peer(channel_id)
+        
+        # Get latest message
+        messages = client.get_chat_history(channel.id, limit=1)
+        latest_message = next(messages, None)
+        
+        if latest_message:
+            # Mark channel messages as read
+            client.invoke(
+                functions.channels.ReadMessageContents(
+                    channel=channel_peer,
+                    id=[latest_message.id]
+                )
+            )
+            
+            # Also mark history as read
+            client.invoke(
+                functions.channels.ReadHistory(
+                    channel=channel_peer,
+                    max_id=latest_message.id
+                )
+            )
+            
+            client.invoke(functions.messages.GetMessagesViews(peer=channel_peer, id=[latest_message.id], increment=True))
+            print(f"{GREEN}Done{RESET}")
         else:
-            print(f"{RED}{{Failed to log in}}{RESET}")
+            print(f"{YELLOW}No messages found{RESET}")
+            
+    except FloodWait as e:
+        print(f"{YELLOW}Rate limited, waiting {e.x}s{RESET}")
+        time.sleep(e.x)
+    except Exception as e:
+        print(f"{RED}Failed: {str(e)}{RESET}")
+    time.sleep(2)
 
-    return clients
 
-def process_clients(action, target):
-    """Process all clients with proper cleanup"""
-    try:
-        for client in clients:
-            if action == "message":
-                send_message_with_status(client, target)
-            elif action == "join":
-                join_group(client, target)
-            elif action == "read_chats":
-                read_chats(client, target)
-    finally:
-        # Cleanup phase
-        for client in clients:
-            try:
-                client.stop()
-            except:
-                pass
-            time.sleep(0.5)  # Delay between client stops
+
 
 def main():
-    """Main function to handle user input and operations"""
-    load_accounts()  # Load accounts
+    load_accounts()
+    if not accounts:
+        return
 
-    clients = []  # Global clients list
+    clients = []
 
     while True:
         print("\nOptions:")
         print("1. Login Clients")
         print("2. Join group")
         print("3. Read chats")
-        print("4. Exit")
+        print("4. Mark channel messages as read")
+        print("5. Send message to user")
+        print("6. Exit")
         
-        choice = input("Enter your choice (1-4): ")
+        choice = input("Enter your choice (1-6): ")
         
         if choice == "1":
             # Login clients
@@ -209,22 +198,13 @@ def main():
             else:
                 print(f"{RED}No clients logged in.{RESET}")
         elif choice == "2":
-            group_link = input("Enter group link or @ username: ")
-            process_clients("join", group_link)
-        elif choice == "3":
-            group_link = input("Enter group link or @ username: ")
-            process_clients("read_chats", group_link)
-        elif choice == "4":
-            print("Exiting program...")
-            # Stop clients if they were logged in
+            print("Exiting...")
             for client in clients:
                 try:
                     client.stop()
                 except:
                     pass
             break
-        else:
-            print(f"{RED}Invalid choice. Please try again.{RESET}")
 
 if __name__ == "__main__":
     main()
