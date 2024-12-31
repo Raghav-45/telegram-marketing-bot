@@ -79,7 +79,7 @@ def login_all_clients():
 
     return clients
 
-def mark_channel_as_read(client, channel_id):
+def mark_channel_as_read(client, channel_id, specefic_id=0):
     try:
         phone = client.get_me().phone_number
         print(f"Marking channel messages read for {phone}...", end=" ")
@@ -109,7 +109,10 @@ def mark_channel_as_read(client, channel_id):
                 )
             )
             
-            client.invoke(functions.messages.GetMessagesViews(peer=channel_peer, id=[latest_message.id], increment=True))
+            if specefic_id == 0:
+                client.invoke(functions.messages.GetMessagesViews(peer=channel_peer, id=[latest_message.id], increment=True))
+            else:
+                client.invoke(functions.messages.GetMessagesViews(peer=channel_peer, id=[specefic_id], increment=True))
             print(f"{GREEN}Done{RESET}")
         else:
             print(f"{YELLOW}No messages found{RESET}")
