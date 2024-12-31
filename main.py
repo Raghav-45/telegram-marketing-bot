@@ -21,9 +21,12 @@ RESET = "\033[0m"
 if not os.path.exists(SESSIONS_DIR):
     os.makedirs(SESSIONS_DIR)
 
+# Global variable to store loaded accounts
+accounts = []
+
 def load_accounts():
     """Load phone numbers from CSV file or create a default one if not exists"""
-    accounts = []
+    global accounts  # Use global variable to store accounts
     try:
         with open(CSV_FILE, 'r') as file:
             csv_reader = csv.reader(file)
@@ -33,14 +36,15 @@ def load_accounts():
                     phone = row[0].strip()
                     phone = phone if phone.startswith('91') else f"91{phone}"
                     accounts.append({"phone": phone})
-        return accounts
+        print(f"{GREEN}{len(accounts)} Accounts loaded successfully!{RESET}")
     except FileNotFoundError:
-        print(f"{CSV_FILE} not found. Creating a sample file...")
+        print(f"{RED}{CSV_FILE} not found. Creating a sample file...{RESET}")
         with open(CSV_FILE, 'w', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(['phone'])
             writer.writerow([DEFAULT_PHONE])
-        return [{'phone': f"91{DEFAULT_PHONE}"}]
+        accounts = [{'phone': f"91{DEFAULT_PHONE}"}]
+        print(f"{GREEN}Sample file created with default account!{RESET}")
 
 def login_to_telegram(phone_number):
     """Initialize and start Telegram client for a given phone number"""
@@ -57,6 +61,23 @@ def login_to_telegram(phone_number):
     except Exception as e:
         print(f"{RED}{{failed - {str(e)}}}{RESET}")
         return None
+
+def login_all_clients():
+    """Log in all clients."""
+    clients = []
+    
+    # Login phase (only once after accounts are loaded)
+    for account in accounts:
+        print(f"Logging in to account: {account['phone']}", end=" ")
+        client = login_to_telegram(account["phone"])
+        if client:
+            clients.append(client)
+            print(f"{GREEN}{{Success}}{RESET}")
+            time.sleep(1)  # Delay between logins
+        else:
+            print(f"{RED}{{Failed to log in}}{RESET}")
+
+    return clients
 
 def join_group(client, group_link):
     """Join a group using invite link or username"""
@@ -128,21 +149,25 @@ def send_message_with_status(client, target_username):
     finally:
         time.sleep(1)  # Ensure delay after each message attempt
 
-def process_clients(action, target):
-    """Process all clients with proper cleanup"""
+def login_all_clients():
+    """Log in all clients manually."""
     clients = []
-    accounts = load_accounts()
-
-    # Login phase
+    
+    # Login phase (only once after accounts are loaded)
     for account in accounts:
         print(f"Logging in to account: {account['phone']}", end=" ")
         client = login_to_telegram(account["phone"])
         if client:
             clients.append(client)
             print(f"{GREEN}{{Success}}{RESET}")
-            time.sleep(1)  # Delay between logins
+            # time.sleep(1)  # Delay between logins
+        else:
+            print(f"{RED}{{Failed to log in}}{RESET}")
 
-    # Action phase
+    return clients
+
+def process_clients(action, target):
+    """Process all clients with proper cleanup"""
     try:
         for client in clients:
             if action == "message":
@@ -162,9 +187,13 @@ def process_clients(action, target):
 
 def main():
     """Main function to handle user input and operations"""
+    load_accounts()  # Load accounts
+
+    clients = []  # Global clients list
+
     while True:
         print("\nOptions:")
-        print("1. Send message to user")
+        print("1. Login Clients")
         print("2. Join group")
         print("3. Read chats")
         print("4. Exit")
@@ -172,8 +201,13 @@ def main():
         choice = input("Enter your choice (1-4): ")
         
         if choice == "1":
-            target_username = input("Enter the username to send message (without @): ")
-            process_clients("message", target_username)
+            # Login clients
+            print(f"\n{GREEN}Logging in all clients...{RESET}")
+            clients = login_all_clients()  # Log in clients manually
+            if clients:
+                print(f"{GREEN}All clients are logged in successfully.{RESET}")
+            else:
+                print(f"{RED}No clients logged in.{RESET}")
         elif choice == "2":
             group_link = input("Enter group link or @ username: ")
             process_clients("join", group_link)
@@ -182,6 +216,12 @@ def main():
             process_clients("read_chats", group_link)
         elif choice == "4":
             print("Exiting program...")
+            # Stop clients if they were logged in
+            for client in clients:
+                try:
+                    client.stop()
+                except:
+                    pass
             break
         else:
             print(f"{RED}Invalid choice. Please try again.{RESET}")
