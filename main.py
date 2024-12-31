@@ -1,6 +1,6 @@
 from pyrogram import Client
-from pyrogram.errors import PeerIdInvalid, FloodWait, InviteHashExpired, UsernameNotOccupied
-from pyrogram.raw import functions, types
+from pyrogram.errors import FloodWait
+from pyrogram.raw import functions
 import time
 import csv
 import os
@@ -49,27 +49,44 @@ def login_account(phone_number):
         print(f"{RED}Login failed for {phone_number}: {str(e)}{RESET}")
         return None
 
-def mark_messages_read(client, chat_id):
+def mark_channel_read(client, channel_id):
     try:
         phone = client.get_me().phone_number
-        print(f"Marking messages read for {phone}...", end=" ")
+        print(f"Marking channel messages read for {phone}...", end=" ")
         
-        # Get the latest message ID
-        messages = client.get_chat_history(chat_id, limit=1)
+        # Get channel entity
+        channel = client.get_chat(channel_id)
+        channel_peer = client.resolve_peer(channel_id)
+        
+        # Get latest message
+        messages = client.get_chat_history(channel.id, limit=1)
         latest_message = next(messages, None)
         
         if latest_message:
-            # Mark messages as read up to the latest message
+            # Mark channel messages as read
+            client.invoke(
+                functions.channels.ReadMessageContents(
+                    channel=channel_peer,
+                    id=[latest_message.id]
+                )
+            )
+            
+            # Also mark history as read
             client.invoke(
                 functions.channels.ReadHistory(
-                    channel=client.resolve_peer(chat_id),
+                    channel=channel_peer,
                     max_id=latest_message.id
                 )
             )
+            
+            client.invoke(functions.messages.GetMessagesViews(peer=channel_peer, id=[latest_message.id], increment=True))
             print(f"{GREEN}Done{RESET}")
         else:
             print(f"{YELLOW}No messages found{RESET}")
             
+    except FloodWait as e:
+        print(f"{YELLOW}Rate limited, waiting {e.x}s{RESET}")
+        time.sleep(e.x)
     except Exception as e:
         print(f"{RED}Failed: {str(e)}{RESET}")
     time.sleep(2)
@@ -89,15 +106,15 @@ def main():
 
     while True:
         print("\nOptions:")
-        print("1. Mark messages as read")
+        print("1. Mark channel messages as read")
         print("2. Exit")
         
         choice = input("Choice (1-2): ")
         
         if choice == "1":
-            chat_id = input("Enter group username or link: ")
+            channel = input("Enter channel username or link: ")
             for client in clients:
-                mark_messages_read(client, chat_id)
+                mark_channel_read(client, channel)
         elif choice == "2":
             print("Exiting...")
             for client in clients:
