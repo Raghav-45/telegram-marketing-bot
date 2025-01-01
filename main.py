@@ -1,6 +1,6 @@
 from pyrogram import Client
 from pyrogram.raw import functions
-from pyrogram.errors import PeerIdInvalid, FloodWait, InviteHashExpired, UsernameNotOccupied, ApiIdInvalid
+from pyrogram.errors import PeerIdInvalid, FloodWait, UsernameNotOccupied, ApiIdInvalid
 import time
 import csv
 import os
