@@ -1,6 +1,6 @@
 from pyrogram import Client
 from pyrogram.raw import functions
-from pyrogram.errors import PeerIdInvalid, FloodWait, UsernameNotOccupied, ApiIdInvalid
+from pyrogram.errors import PeerIdInvalid, FloodWait, UsernameNotOccupied, ApiIdInvalid, UserAlreadyParticipant
 import time
 import csv
 import os
@@ -216,6 +216,15 @@ def mark_channel_as_read(client, channel_id, start_id=None, last_n_messages=None
     except Exception as e:
         print(f"{RED}Failed: {str(e)}{RESET}")
 
+def join_channel(client, channel_link):
+    """Join a channel with the given link or username"""
+    try:
+        client.join_chat(channel_link)
+    except UserAlreadyParticipant:
+        time.sleep(0)
+    except Exception as e:
+        print(f"{RED}Error joining channel {client.get_me().phone_number}{RESET}")
+
 def process_clients(clients, action, target, start_id=None, last_n_messages=None, view_delay=1):
     """Process all clients with proper cleanup"""
     if not clients:
@@ -224,6 +233,8 @@ def process_clients(clients, action, target, start_id=None, last_n_messages=None
         
     for client in clients:
         if action == "mark_channel_as_read":
+            # Join the channel
+            join_channel(client, target)
             mark_channel_as_read(client, target, start_id, last_n_messages, view_delay)
 
 def main():
