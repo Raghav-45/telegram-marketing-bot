@@ -27,7 +27,7 @@ accounts = []
 
 def load_accounts():
     """Load phone numbers from CSV file or create a default one if not exists"""
-    global accounts  # Use global variable to store accounts
+    global accounts
     try:
         with open(CSV_FILE, 'r') as file:
             csv_reader = csv.reader(file)
@@ -66,7 +66,6 @@ def login_all_clients():
     """Log in all clients."""
     clients = []
     
-    # Login phase (only once after accounts are loaded)
     for account in accounts:
         print(f"Logging in to account: {account['phone']}", end=" ")
         client = login_to_telegram(account["phone"])
@@ -79,47 +78,80 @@ def login_all_clients():
 
     return clients
 
-def mark_channel_as_read(client, channel_id, specefic_id=0):
+def mark_channel_as_read(client, channel_id):
     try:
         phone = client.get_me().phone_number
-        print(f"Marking channel messages read for {phone}...", end=" ")
+        print(f"Marking messages read for {phone}...", end=' ')
         
         # Get channel entity
         channel = client.get_chat(channel_id)
         channel_peer = client.resolve_peer(channel_id)
         
-        # Get latest message
-        messages = client.get_chat_history(channel.id, limit=1)
-        latest_message = next(messages, None)
+        # Get messages in smaller chunks
+        batch_size = 100
+        message_ids = []
+        total_messages_processed = 0
         
-        if latest_message:
-            # Mark channel messages as read
-            client.invoke(
-                functions.channels.ReadMessageContents(
-                    channel=channel_peer,
-                    id=[latest_message.id]
+        for message in client.get_chat_history(channel.id):
+            message_ids.append(message.id)
+            if len(message_ids) >= batch_size:
+                try:
+                    # Mark messages as read in batches
+                    client.invoke(
+                        functions.channels.ReadMessageContents(
+                            channel=channel_peer,
+                            id=message_ids
+                        )
+                    )
+                    
+                    # Increment view counts
+                    client.invoke(
+                        functions.messages.GetMessagesViews(
+                            peer=channel_peer,
+                            id=message_ids,
+                            increment=True
+                        )
+                    )
+                    
+                    total_messages_processed += len(message_ids)
+                    print(f"{GREEN}{total_messages_processed} messages as read{RESET}")
+                    message_ids = []  # Reset for next batch
+                    time.sleep(2)  # Delay between batches to avoid rate limits
+                except FloodWait as e:
+                    print(f"{YELLOW}Rate limited, waiting {e.x}s{RESET}")
+                    time.sleep(e.x)
+                    continue
+        
+        # Process any remaining messages
+        if message_ids:
+            try:
+                client.invoke(
+                    functions.channels.ReadMessageContents(
+                        channel=channel_peer,
+                        id=message_ids
+                    )
                 )
-            )
-            
-            # Also mark history as read
-            client.invoke(
-                functions.channels.ReadHistory(
-                    channel=channel_peer,
-                    max_id=latest_message.id
+                client.invoke(
+                    functions.messages.GetMessagesViews(
+                        peer=channel_peer,
+                        id=message_ids,
+                        increment=True
+                    )
                 )
+                total_messages_processed += len(message_ids)
+                print(f"{GREEN}{len(message_ids)} messages as read{RESET}")
+            except FloodWait as e:
+                print(f"{YELLOW}Rate limited, waiting {e.x}s{RESET}")
+                time.sleep(e.x)
+        
+        # Mark entire history as read
+        client.invoke(
+            functions.channels.ReadHistory(
+                channel=channel_peer,
+                max_id=max(message_ids) if message_ids else 0
             )
+        )
             
-            if specefic_id == 0:
-                client.invoke(functions.messages.GetMessagesViews(peer=channel_peer, id=[latest_message.id], increment=True))
-            else:
-                client.invoke(functions.messages.GetMessagesViews(peer=channel_peer, id=[specefic_id], increment=True))
-            print(f"{GREEN}Done{RESET}")
-        else:
-            print(f"{YELLOW}No messages found{RESET}")
-            
-    except FloodWait as e:
-        print(f"{YELLOW}Rate limited, waiting {e.x}s{RESET}")
-        time.sleep(e.x)
     except Exception as e:
         print(f"{RED}Failed: {str(e)}{RESET}")
     time.sleep(2)
@@ -129,7 +161,6 @@ def process_clients(clients, action, target):
     for client in clients:
         if action == "mark_channel_as_read":
             mark_channel_as_read(client, target)
-
 
 def main():
     load_accounts()
@@ -141,18 +172,14 @@ def main():
     while True:
         print("\nOptions:")
         print("1. Login Clients")
-        # print("2. Join group")
-        # print("3. Read chats")
-        print("2. Mark channel messages as read")
-        # print("5. Send message to user")
+        print("2. Mark all channel messages as read")
         print("3. Exit")
         
-        choice = input("Enter your choice (1-6): ")
+        choice = input("Enter your choice (1-3): ")
         
         if choice == "1":
-            # Login clients
             print(f"\n{GREEN}Logging in all clients...{RESET}")
-            clients = login_all_clients()  # Log in clients manually
+            clients = login_all_clients()
             if clients:
                 print(f"{GREEN}All clients are logged in successfully.{RESET}")
             else:
