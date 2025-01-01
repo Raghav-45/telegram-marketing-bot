@@ -10,7 +10,6 @@ import random
 SESSIONS_DIR = "sessions"
 ACCOUNTS_CSV = "accounts.csv"
 API_CSV = "api.csv"
-DEFAULT_PHONE = "9315988300"
 
 # Color codes for status messages
 GREEN = "\033[92m"
@@ -63,13 +62,11 @@ def load_accounts():
                     accounts.append({"phone": phone})
         print(f"{GREEN}{len(accounts)} Accounts loaded successfully!{RESET}")
     except FileNotFoundError:
-        print(f"{YELLOW}{ACCOUNTS_CSV} not found. Creating a sample file...{RESET}")
-        with open(ACCOUNTS_CSV, 'w', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow(['phone'])
-            writer.writerow([DEFAULT_PHONE])
-        accounts = [{'phone': f"91{DEFAULT_PHONE}"}]
-        print(f"{GREEN}Sample file created with default account!{RESET}")
+        print(f"{RED}{ACCOUNTS_CSV} not found. Please create it with mobile numbers in it.{RESET}")
+        exit(1)
+    except Exception as e:
+        print(f"{RED}Error loading accounts credentials: {str(e)}{RESET}")
+        exit(1)
 
 def get_random_api_credentials():
     """Get random API credentials from loaded ones"""
