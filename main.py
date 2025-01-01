@@ -247,9 +247,9 @@ def main():
         try:
             print("\nOptions:")
             print("1. Login Clients")
-            print("2. Mark all channel messages as read")
+            print("2. Mark last X messages as read")
             print("3. Mark messages as read from specific ID to latest")
-            print("4. Mark last X messages as read")
+            print("4. Mark all channel messages as read")
             print("5. Exit")
             
             choice = input("Enter your choice (1-5): ")
@@ -266,7 +266,11 @@ def main():
                     print(f"{YELLOW}Please execute option 1 first.{RESET}")
                 else:
                     channel_link = input("Enter channel link or @ username: ")
-                    process_clients(clients, "mark_channel_as_read", channel_link)
+                    try:
+                        num_messages = int(input("Enter number of latest messages to mark as read: "))
+                        process_clients(clients, "mark_channel_as_read", channel_link, None, num_messages)
+                    except ValueError:
+                        print(f"{RED}Invalid number. Please enter a valid number.{RESET}")
             elif choice == "3":
                 if len(clients) == 0:
                     print(f"{YELLOW}Please execute option 1 first.{RESET}")
@@ -282,11 +286,7 @@ def main():
                     print(f"{YELLOW}Please execute option 1 first.{RESET}")
                 else:
                     channel_link = input("Enter channel link or @ username: ")
-                    try:
-                        num_messages = int(input("Enter number of latest messages to mark as read: "))
-                        process_clients(clients, "mark_channel_as_read", channel_link, None, num_messages)
-                    except ValueError:
-                        print(f"{RED}Invalid number. Please enter a valid number.{RESET}")
+                    process_clients(clients, "mark_channel_as_read", channel_link)
             elif choice == "5":
                 print(f"{GREEN}Cleaning up and exiting...{RESET}")
                 for client in clients:
