@@ -126,7 +126,7 @@ def login_all_clients():
 
     return clients
 
-def mark_channel_as_read(client, channel_id, start_id=None, last_n_messages=None):
+def mark_channel_as_read(client, channel_id, start_id=None, last_n_messages=None, view_delay=1):
     try:
         phone = client.get_me().phone_number
         print(f"Marking messages read for {phone}...", end=' ')
@@ -195,7 +195,7 @@ def mark_channel_as_read(client, channel_id, start_id=None, last_n_messages=None
                 
                 total_messages_processed += len(batch_ids)
                 print(f"{GREEN}{total_messages_processed} messages marked as read{RESET}")
-                time.sleep(2)  # Delay between batches to avoid rate limits
+                time.sleep(view_delay)  # Delay between views as per user input
                 
             except FloodWait as e:
                 print(f"{YELLOW}Rate limited, waiting {e.x}s{RESET}")
@@ -206,22 +206,17 @@ def mark_channel_as_read(client, channel_id, start_id=None, last_n_messages=None
                 continue
         
         # Mark entire history as read
-        try:
-            client.invoke(
-                functions.channels.ReadHistory(
-                    channel=channel_peer,
-                    max_id=max(all_message_ids) if all_message_ids else 0
-                )
+        client.invoke(
+            functions.channels.ReadHistory(
+                channel=channel_peer,
+                max_id=max(all_message_ids) if all_message_ids else 0
             )
-            print(f"{GREEN}Successfully marked {total_messages_processed} messages as read{RESET}")
-        except Exception as e:
-            print(f"{RED}Error marking history as read: {str(e)}{RESET}")
+        )
             
     except Exception as e:
         print(f"{RED}Failed: {str(e)}{RESET}")
-    time.sleep(2)
 
-def process_clients(clients, action, target, start_id=None, last_n_messages=None):
+def process_clients(clients, action, target, start_id=None, last_n_messages=None, view_delay=1):
     """Process all clients with proper cleanup"""
     if not clients:
         print(f"{RED}No active clients available{RESET}")
@@ -229,7 +224,7 @@ def process_clients(clients, action, target, start_id=None, last_n_messages=None
         
     for client in clients:
         if action == "mark_channel_as_read":
-            mark_channel_as_read(client, target, start_id, last_n_messages)
+            mark_channel_as_read(client, target, start_id, last_n_messages, view_delay)
 
 def main():
     print(f"{GREEN}Loading API credentials...{RESET}")
@@ -242,7 +237,7 @@ def main():
         return
 
     clients = []
-
+    
     while True:
         try:
             print("\nOptions:")
@@ -268,7 +263,8 @@ def main():
                     channel_link = input("Enter channel link or @ username: ")
                     try:
                         num_messages = int(input("Enter number of latest messages to mark as read: "))
-                        process_clients(clients, "mark_channel_as_read", channel_link, None, num_messages)
+                        view_delay = float(input("Enter delay (in seconds) for each view increment (default is 1 second): ") or 1)
+                        process_clients(clients, "mark_channel_as_read", channel_link, None, num_messages, view_delay)
                     except ValueError:
                         print(f"{RED}Invalid number. Please enter a valid number.{RESET}")
             elif choice == "3":
@@ -278,7 +274,8 @@ def main():
                     channel_link = input("Enter channel link or @ username: ")
                     try:
                         start_id = int(input("Enter the message ID to start from: "))
-                        process_clients(clients, "mark_channel_as_read", channel_link, start_id)
+                        view_delay = float(input("Enter delay (in seconds) for each view increment (default is 1 second): ") or 1)
+                        process_clients(clients, "mark_channel_as_read", channel_link, start_id, None, view_delay)
                     except ValueError:
                         print(f"{RED}Invalid message ID. Please enter a number.{RESET}")
             elif choice == "4":
@@ -286,7 +283,8 @@ def main():
                     print(f"{YELLOW}Please execute option 1 first.{RESET}")
                 else:
                     channel_link = input("Enter channel link or @ username: ")
-                    process_clients(clients, "mark_channel_as_read", channel_link)
+                    view_delay = float(input("Enter delay (in seconds) for each view increment (default is 1 second): ") or 1)
+                    process_clients(clients, "mark_channel_as_read", channel_link, None, None, view_delay)
             elif choice == "5":
                 print(f"{GREEN}Cleaning up and exiting...{RESET}")
                 for client in clients:
