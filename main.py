@@ -126,23 +126,46 @@ def login_all_clients():
 
     return clients
 
-def mark_channel_as_read(client, channel_id, start_id=None, last_n_messages=None, view_delay=1):
+def join_channel(client, channel_link):
+    """Join a channel with the given link or username"""
+    try:
+        # Attempt to join the channel using the provided link
+        client.join_chat(channel_link)
+        print(f"{GREEN}Joined the channel {channel_link} successfully!{RESET}")
+    except UserAlreadyParticipant:
+        print(f"{YELLOW}Already a member of the channel {channel_link}.{RESET}")
+    except Exception as e:
+        print(f"{RED}Error joining channel {channel_link}: {str(e)}{RESET}")
+
+def mark_channel_as_read(client, channel_link, start_id=None, last_n_messages=None, view_delay=1):
     try:
         phone = client.get_me().phone_number
         print(f"Marking messages read for {phone}...", end=' ')
         
-        # Get channel entity with error handling
+        # Join the channel if it's not already done
+        join_channel(client, channel_link)
+        
+        # Get channel entity after joining
         try:
-            channel = client.get_chat(channel_id)
-            channel_peer = client.resolve_peer(channel_id)
-        except (PeerIdInvalid, UsernameNotOccupied):
-            print(f"{RED}Invalid channel ID or username{RESET}")
-            return
+            channel = client.get_chat(channel_link)  # Get the chat information
         except Exception as e:
             print(f"{RED}Error accessing channel: {str(e)}{RESET}")
             return
+
+        # Check if client has access to message history
+        try:
+            # Try fetching the latest message to ensure access
+            messages = client.get_chat_history(channel.id, limit=1)  
+        except Exception as e:
+            print(f"{RED}Unable to access messages in this channel: {str(e)}{RESET}")
+            return
         
-        # Get all message IDs with error handling
+        # If no messages are found or can't access, return early
+        if not messages:
+            print(f"{YELLOW}No messages found in channel or can't access messages.{RESET}")
+            return
+            
+        # Get all message IDs
         all_message_ids = []
         try:
             for message in client.get_chat_history(channel.id):
@@ -156,7 +179,7 @@ def mark_channel_as_read(client, channel_id, start_id=None, last_n_messages=None
         if not all_message_ids:
             print(f"{YELLOW}No messages found in channel{RESET}")
             return
-            
+        
         # Filter messages based on start_id or last_n_messages
         if start_id is not None:
             try:
@@ -179,7 +202,7 @@ def mark_channel_as_read(client, channel_id, start_id=None, last_n_messages=None
                 # Mark messages as read in batches
                 client.invoke(
                     functions.channels.ReadMessageContents(
-                        channel=channel_peer,
+                        channel=client.resolve_peer(channel.id),  # Resolve channel peer
                         id=batch_ids
                     )
                 )
@@ -187,7 +210,7 @@ def mark_channel_as_read(client, channel_id, start_id=None, last_n_messages=None
                 # Increment view counts
                 client.invoke(
                     functions.messages.GetMessagesViews(
-                        peer=channel_peer,
+                        peer=client.resolve_peer(channel.id),
                         id=batch_ids,
                         increment=True
                     )
@@ -208,22 +231,13 @@ def mark_channel_as_read(client, channel_id, start_id=None, last_n_messages=None
         # Mark entire history as read
         client.invoke(
             functions.channels.ReadHistory(
-                channel=channel_peer,
+                channel=client.resolve_peer(channel.id),
                 max_id=max(all_message_ids) if all_message_ids else 0
             )
         )
             
     except Exception as e:
         print(f"{RED}Failed: {str(e)}{RESET}")
-
-def join_channel(client, channel_link):
-    """Join a channel with the given link or username"""
-    try:
-        client.join_chat(channel_link)
-    except UserAlreadyParticipant:
-        time.sleep(0)
-    except Exception as e:
-        print(f"{RED}Error joining channel {client.get_me().phone_number}{RESET}")
 
 def process_clients(clients, action, target, start_id=None, last_n_messages=None, view_delay=1):
     """Process all clients with proper cleanup"""
