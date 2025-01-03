@@ -58,7 +58,7 @@ def load_accounts():
             for row in csv_reader:
                 if row:
                     phone = row[0].strip()
-                    phone = phone if phone.startswith('91') else f"91{phone}"
+                    phone = f"91{phone}"
                     accounts.append({"phone": phone})
         print(f"{GREEN}{len(accounts)} Accounts loaded successfully!{RESET}")
     except FileNotFoundError:
