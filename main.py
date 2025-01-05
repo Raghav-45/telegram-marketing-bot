@@ -5,6 +5,7 @@ import time
 import csv
 import os
 import random
+import subprocess
 
 # Constants
 SESSIONS_DIR = "sessions"
@@ -24,6 +25,30 @@ if not os.path.exists(SESSIONS_DIR):
 # Global variables
 accounts = []
 api_credentials = []
+
+# Function to display the welcome banner
+def display_banner():
+    # ANSI color codes for styling
+    gr = "\033[92m"  # Green
+    re = "\033[91m"  # Red
+    ye = "\033[93m"  # Yellow
+    w = "\033[0m"    # Reset
+    r = "\033[0m"    # Reset
+
+    b = [
+        '███████╗███╗   ██╗ ██████╗  █████╗  ██████╗ ███████╗    ██╗  ██╗',
+        '██╔════╝████╗  ██║██╔════╝ ██╔══██╗██╔════╝ ██╔════╝    ╚██╗██╔╝',
+        '█████╗  ██╔██╗ ██║██║  ███╗███████║██║  ███╗█████╗       ╚███╔╝ ',
+        '██╔══╝  ██║╚██╗██║██║   ██║██╔══██║██║   ██║██╔══╝       ██╔██╗ ',
+        '███████╗██║ ╚████║╚██████╔╝██║  ██║╚██████╔╝███████╗    ██╔╝ ██╗',
+        '╚══════╝╚═╝  ╚═══╝ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝    ╚═╝  ╚═╝'
+    ]
+    
+    for char in b:
+        print(f'{gr}{char}{w}')
+    
+    print(f'{ye}EngageX: The Ultimate Engagement Tool{re}')
+    print(f'{ye}Developed by: Raghav (@raghavaditya45){re}\n')
 
 def load_api_credentials():
     """Load API credentials from api.csv file"""
@@ -115,7 +140,7 @@ def login_all_clients():
             if not client:
                 print(f"{YELLOW}Retrying... ({retry_count-1} attempts left){RESET}")
                 retry_count -= 1
-                time.sleep(2)
+                time.sleep(1)
         
         if client:
             clients.append(client)
@@ -252,10 +277,9 @@ def process_clients(clients, action, target, start_id=None, last_n_messages=None
             mark_channel_as_read(client, target, start_id, last_n_messages, view_delay)
 
 def main():
-    print(f"{GREEN}Loading API credentials...{RESET}")
-    load_api_credentials()
+    display_banner()  # Display the welcome banner
     
-    print(f"{GREEN}Loading accounts...{RESET}")
+    load_api_credentials()
     load_accounts()
     
     if not accounts or not api_credentials:
