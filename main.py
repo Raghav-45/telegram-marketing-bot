@@ -1,4 +1,5 @@
 from pyrogram import Client
+from pyrogram.enums import ChatType
 from pyrogram.raw import functions
 from pyrogram.errors import PeerIdInvalid, FloodWait, UsernameNotOccupied, ApiIdInvalid, UserAlreadyParticipant
 import time
@@ -151,28 +152,33 @@ def login_all_clients():
 
     return clients
 
-def join_channel(client, channel_link):
-    """Join a channel with the given link or username"""
+def join_channel_or_group(client, chat_link):
+    """Join a channel or group with the given link or username"""
     try:
-        # Attempt to join the channel using the provided link
-        client.join_chat(channel_link)
-        print(f"{GREEN}Joined the channel {channel_link} successfully!{RESET}")
-    except UserAlreadyParticipant:
-        print(f"{YELLOW}Already a member of the channel {channel_link}.{RESET}")
-    except Exception as e:
-        print(f"{RED}Error joining channel {channel_link}: {str(e)}{RESET}")
+        # Get chat information to determine its type
+        chat = client.get_chat(chat_link)
+        chat_type = chat.type  # 'channel', 'supergroup', 'group'
 
-def mark_channel_as_read(client, channel_link, start_id=None, last_n_messages=None, view_delay=1):
+        if chat_type in [ChatType.SUPERGROUP, ChatType.GROUP, ChatType.CHANNEL]:
+            client.join_chat(chat_link)
+            print(f"{GREEN}Joined the {chat_type.value} '{chat.title}' successfully!{RESET}")
+        else:
+            print(f"{RED}The target '{chat_link}' is not a channel or group.{RESET}")
+    except UserAlreadyParticipant:
+        print(f"{YELLOW}Already a member of the {chat_type.value} {chat_link}.{RESET}")
+    except UsernameNotOccupied:
+        print(f"{RED}The username {chat_link} does not exist.{RESET}")
+    except Exception as e:
+        print(f"{RED}Error joining chat {chat_link}: {str(e)}{RESET}")
+
+def mark_as_read(client, chat_link, start_id=None, last_n_messages=None, view_delay=1):
     try:
         phone = client.get_me().phone_number
         print(f"Marking messages read for {phone}...", end=' ')
         
-        # Join the channel if it's not already done
-        join_channel(client, channel_link)
-        
         # Get channel entity after joining
         try:
-            channel = client.get_chat(channel_link)  # Get the chat information
+            channel = client.get_chat(chat_link)  # Get the chat information
         except Exception as e:
             print(f"{RED}Error accessing channel: {str(e)}{RESET}")
             return
@@ -180,7 +186,7 @@ def mark_channel_as_read(client, channel_link, start_id=None, last_n_messages=No
         # Check if client has access to message history
         try:
             # Try fetching the latest message to ensure access
-            messages = client.get_chat_history(channel.id, limit=1)  
+            messages = client.get_chat_history(channel.id, limit=1)
         except Exception as e:
             print(f"{RED}Unable to access messages in this channel: {str(e)}{RESET}")
             return
@@ -242,7 +248,7 @@ def mark_channel_as_read(client, channel_link, start_id=None, last_n_messages=No
                 )
                 
                 total_messages_processed += len(batch_ids)
-                print(f"{GREEN}{total_messages_processed} messages marked as read{RESET}")
+                print(f"{GREEN}{{ {total_messages_processed} messages marked as read }}{RESET} \n")
                 time.sleep(view_delay)  # Delay between views as per user input
                 
             except FloodWait as e:
@@ -273,8 +279,8 @@ def process_clients(clients, action, target, start_id=None, last_n_messages=None
     for client in clients:
         if action == "mark_channel_as_read":
             # Join the channel
-            join_channel(client, target)
-            mark_channel_as_read(client, target, start_id, last_n_messages, view_delay)
+            join_channel_or_group(client, target)
+            mark_as_read(client, target, start_id, last_n_messages, view_delay)
 
 def main():
     display_banner()  # Display the welcome banner
