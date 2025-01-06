@@ -1,12 +1,12 @@
 from pyrogram import Client
 from pyrogram.enums import ChatType
 from pyrogram.raw import functions
-from pyrogram.errors import PeerIdInvalid, FloodWait, UsernameNotOccupied, ApiIdInvalid, UserAlreadyParticipant
+from pyrogram.errors import FloodWait, UsernameNotOccupied, ApiIdInvalid, UserAlreadyParticipant
 import time
 import csv
 import os
 import random
-import subprocess
+import sys
 
 # Constants
 SESSIONS_DIR = "sessions"
@@ -146,7 +146,7 @@ def login_all_clients():
         if client:
             clients.append(client)
             print(f"{GREEN}{{Success}}{RESET}")
-            time.sleep(1)
+            time.sleep(0.5)
         else:
             print(f"{RED}{{Failed to log in after all attempts}}{RESET}")
 
@@ -159,15 +159,17 @@ def join_channel_or_group(client, chat_link):
         chat = client.get_chat(chat_link)
         chat_type = chat.type  # 'channel', 'supergroup', 'group'
 
-        if chat_type in [ChatType.SUPERGROUP, ChatType.GROUP, ChatType.CHANNEL]:
+        if chat_type in [ChatType.CHANNEL, ChatType.GROUP, ChatType.SUPERGROUP]:
             client.join_chat(chat_link)
             print(f"{GREEN}Joined the {chat_type.value} '{chat.title}' successfully!{RESET}")
         else:
             print(f"{RED}The target '{chat_link}' is not a channel or group.{RESET}")
     except UserAlreadyParticipant:
-        print(f"{YELLOW}Already a member of the {chat_type.value} {chat_link}.{RESET}")
+        # print(f"{YELLOW}Already a member of the {chat_type.value} {chat_link}.{RESET}")
+        time.sleep(0)
     except UsernameNotOccupied:
         print(f"{RED}The username {chat_link} does not exist.{RESET}")
+        sys.exit(1)  # Terminate the program with an error code
     except Exception as e:
         print(f"{RED}Error joining chat {chat_link}: {str(e)}{RESET}")
 
