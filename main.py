@@ -1,15 +1,17 @@
 from pyrogram import Client
-from pyrogram.errors import PeerIdInvalid, FloodWait, InviteHashExpired, UsernameNotOccupied
+from pyrogram.enums import ChatType
+from pyrogram.raw import functions
+from pyrogram.errors import FloodWait, UsernameNotOccupied, ApiIdInvalid, UserAlreadyParticipant
 import time
 import csv
 import os
+import random
+import sys
 
 # Constants
-API_ID = 954660
-API_HASH = "722f3cedf17305b3955a545b28b53995"
 SESSIONS_DIR = "sessions"
-CSV_FILE = "accounts.csv"
-DEFAULT_PHONE = "9315988300"
+ACCOUNTS_CSV = "accounts.csv"
+API_CSV = "api.csv"
 
 # Color codes for status messages
 GREEN = "\033[92m"
@@ -21,190 +23,345 @@ RESET = "\033[0m"
 if not os.path.exists(SESSIONS_DIR):
     os.makedirs(SESSIONS_DIR)
 
-# Global variable to store loaded accounts
+# Global variables
 accounts = []
+api_credentials = []
+
+# Function to display the welcome banner
+def display_banner():
+    # ANSI color codes for styling
+    gr = "\033[92m"  # Green
+    re = "\033[91m"  # Red
+    ye = "\033[93m"  # Yellow
+    w = "\033[0m"    # Reset
+    r = "\033[0m"    # Reset
+
+    b = [
+        '███████╗███╗   ██╗ ██████╗  █████╗  ██████╗ ███████╗    ██╗  ██╗',
+        '██╔════╝████╗  ██║██╔════╝ ██╔══██╗██╔════╝ ██╔════╝    ╚██╗██╔╝',
+        '█████╗  ██╔██╗ ██║██║  ███╗███████║██║  ███╗█████╗       ╚███╔╝ ',
+        '██╔══╝  ██║╚██╗██║██║   ██║██╔══██║██║   ██║██╔══╝       ██╔██╗ ',
+        '███████╗██║ ╚████║╚██████╔╝██║  ██║╚██████╔╝███████╗    ██╔╝ ██╗',
+        '╚══════╝╚═╝  ╚═══╝ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝    ╚═╝  ╚═╝'
+    ]
+    
+    for char in b:
+        print(f'{gr}{char}{w}')
+    
+    print(f'{ye}EngageX: The Ultimate Engagement Tool{re}')
+    print(f'{ye}Developed by: Raghav (@raghavaditya45){re}\n')
+
+def load_api_credentials():
+    """Load API credentials from api.csv file"""
+    global api_credentials
+    try:
+        with open(API_CSV, 'r') as file:
+            csv_reader = csv.reader(file)
+            for row in csv_reader:
+                if row:
+                    # Handle both comma-separated and space-separated formats
+                    creds = ','.join(row).replace(' ', ',').split(',')
+                    if len(creds) >= 2:
+                        api_credentials.append({
+                            "api_id": int(creds[0].strip()),
+                            "api_hash": creds[1].strip()
+                        })
+        print(f"{GREEN}{len(api_credentials)} API credentials loaded successfully!{RESET}")
+    except FileNotFoundError:
+        print(f"{RED}{API_CSV} not found. Please create it with API credentials.{RESET}")
+        exit(1)
+    except Exception as e:
+        print(f"{RED}Error loading API credentials: {str(e)}{RESET}")
+        exit(1)
 
 def load_accounts():
     """Load phone numbers from CSV file or create a default one if not exists"""
-    global accounts  # Use global variable to store accounts
+    global accounts
     try:
-        with open(CSV_FILE, 'r') as file:
+        with open(ACCOUNTS_CSV, 'r') as file:
             csv_reader = csv.reader(file)
             next(csv_reader)  # Skip header
             for row in csv_reader:
                 if row:
                     phone = row[0].strip()
-                    phone = phone if phone.startswith('91') else f"91{phone}"
+                    phone = f"91{phone}"
                     accounts.append({"phone": phone})
         print(f"{GREEN}{len(accounts)} Accounts loaded successfully!{RESET}")
     except FileNotFoundError:
-        print(f"{RED}{CSV_FILE} not found. Creating a sample file...{RESET}")
-        with open(CSV_FILE, 'w', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow(['phone'])
-            writer.writerow([DEFAULT_PHONE])
-        accounts = [{'phone': f"91{DEFAULT_PHONE}"}]
-        print(f"{GREEN}Sample file created with default account!{RESET}")
+        print(f"{RED}{ACCOUNTS_CSV} not found. Please create it with mobile numbers in it.{RESET}")
+        exit(1)
+    except Exception as e:
+        print(f"{RED}Error loading accounts credentials: {str(e)}{RESET}")
+        exit(1)
+
+def get_random_api_credentials():
+    """Get random API credentials from loaded ones"""
+    if not api_credentials:
+        print(f"{RED}No API credentials available!{RESET}")
+        return None
+    return random.choice(api_credentials)
 
 def login_to_telegram(phone_number):
     """Initialize and start Telegram client for a given phone number"""
     try:
+        creds = get_random_api_credentials()
+        if not creds:
+            return None
+
         client = Client(
             name=f"{SESSIONS_DIR}/session_{phone_number}",
-            api_id=API_ID,
-            api_hash=API_HASH,
+            api_id=creds["api_id"],
+            api_hash=creds["api_hash"],
             phone_number=phone_number
         )
         client.start()
-        time.sleep(0.5)  # Add small delay between client starts
         return client
+    except ApiIdInvalid:
+        print(f"{RED}Invalid API credentials for {phone_number}{RESET}")
+        return None
+    except FloodWait as e:
+        print(f"{YELLOW}Rate limited for {phone_number}, waiting {e.x}s{RESET}")
+        time.sleep(e.x)
+        return None
     except Exception as e:
-        print(f"{RED}{{failed - {str(e)}}}{RESET}")
+        print(f"{RED}Error logging in {phone_number}: {str(e)}{RESET}")
         return None
 
 def login_all_clients():
-    """Log in all clients."""
+    """Log in all clients with error handling"""
     clients = []
     
-    # Login phase (only once after accounts are loaded)
     for account in accounts:
         print(f"Logging in to account: {account['phone']}", end=" ")
-        client = login_to_telegram(account["phone"])
+        retry_count = 3
+        client = None
+        
+        while retry_count > 0 and not client:
+            client = login_to_telegram(account["phone"])
+            if not client:
+                print(f"{YELLOW}Retrying... ({retry_count-1} attempts left){RESET}")
+                retry_count -= 1
+                time.sleep(1)
+        
         if client:
             clients.append(client)
             print(f"{GREEN}{{Success}}{RESET}")
-            time.sleep(1)  # Delay between logins
+            time.sleep(0.5)
         else:
-            print(f"{RED}{{Failed to log in}}{RESET}")
-
+            print(f"{RED}{{Failed to log in after all attempts}}{RESET}")
     return clients
 
-def join_group(client, group_link):
-    """Join a group using invite link or username"""
+def join_channel_or_group(client, chat_link):
+    """Join a channel or group with the given link or username"""
     try:
-        phone = client.get_me().phone_number
-        print(f"Joining group with {phone}...", end=" ")
-        
-        if group_link.startswith('https://t.me/'):
-            identifier = group_link.split('/')[-1]
+        # Get chat information to determine its type
+        chat = client.get_chat(chat_link)
+        chat_type = chat.type  # 'channel', 'supergroup', 'group'
+
+        if chat_type in [ChatType.CHANNEL, ChatType.GROUP, ChatType.SUPERGROUP]:
+            client.join_chat(chat_link)
+            print(f"{GREEN}Joined the {chat_type.value} '{chat.title}' successfully!{RESET}")
         else:
-            identifier = group_link.lstrip('@')
-        
-        client.join_chat(identifier)
-        print(f"{GREEN}{{joined}}{RESET}")
-        time.sleep(2)  # Increased delay between joins
-    except InviteHashExpired:
-        print(f"{RED}{{failed - Invite link expired}}{RESET}")
+            print(f"{RED}The target '{chat_link}' is not a channel or group.{RESET}")
+    except UserAlreadyParticipant:
+        # print(f"{YELLOW}Already a member of the {chat_type.value} {chat_link}.{RESET}")
+        time.sleep(0)
     except UsernameNotOccupied:
-        print(f"{RED}{{failed - Invalid username}}{RESET}")
-    except FloodWait as e:
-        print(f"{YELLOW}{{delayed - waiting {e.x}s}}{RESET}")
-        time.sleep(e.x)
-        try:
-            client.join_chat(identifier)
-            print(f"{GREEN}{{joined}}{RESET}")
-        except:
-            print(f"{RED}{{failed}}{RESET}")
+        print(f"{RED}The username {chat_link} does not exist.{RESET}")
+        sys.exit(1)  # Terminate the program with an error code
     except Exception as e:
-        print(f"{RED}{{failed - {str(e)}}}{RESET}")
-    finally:
-        time.sleep(1)  # Ensure delay after each join attempt
+        print(f"{RED}Error joining chat {chat_link}: {str(e)}{RESET}")
 
-def mark_group_as_read(client, group_link):
-    """Join a group using invite link or username"""
-    # try:
-    phone = client.get_me().phone_number
-    print(f"Reading chats with {phone}...", end=" ")
-    
-    if group_link.startswith('https://t.me/'):
-        identifier = group_link.split('/')[-1]
-    else:
-        identifier = group_link.lstrip('@')
-    
-    chat = client.get_chat(identifier)
-    client.read_chat_history(chat.id)
-    print(f"{GREEN}{chat.id}{RESET}")
-    time.sleep(2)  # Increased delay between joins
-
-def mark_channel_as_read(client, channel_id):
+def mark_as_read(client, chat_link, start_id=None, last_n_messages=None, view_delay=1):
     try:
         phone = client.get_me().phone_number
-        print(f"Marking channel messages read for {phone}...", end=" ")
+        print(f"Marking messages read for {phone}...", end=' ')
         
-        # Get channel entity
-        channel = client.get_chat(channel_id)
-        channel_peer = client.resolve_peer(channel_id)
+        # Get channel entity after joining
+        try:
+            channel = client.get_chat(chat_link)  # Get the chat information
+        except Exception as e:
+            print(f"{RED}Error accessing channel: {str(e)}{RESET}")
+            return
+
+        # Check if client has access to message history
+        try:
+            # Try fetching the latest message to ensure access
+            messages = client.get_chat_history(channel.id, limit=1)
+        except Exception as e:
+            print(f"{RED}Unable to access messages in this channel: {str(e)}{RESET}")
+            return
         
-        # Get latest message
-        messages = client.get_chat_history(channel.id, limit=1)
-        latest_message = next(messages, None)
+        # If no messages are found or can't access, return early
+        if not messages:
+            print(f"{YELLOW}No messages found in channel or can't access messages.{RESET}")
+            return
+            
+        # Get all message IDs
+        all_message_ids = []
+        try:
+            for message in client.get_chat_history(channel.id):
+                all_message_ids.append(message.id)
+                if last_n_messages and len(all_message_ids) >= last_n_messages:
+                    break
+        except Exception as e:
+            print(f"{RED}Error getting message history: {str(e)}{RESET}")
+            return
+            
+        if not all_message_ids:
+            print(f"{YELLOW}No messages found in channel{RESET}")
+            return
         
-        if latest_message:
-            # Mark channel messages as read
-            client.invoke(
-                functions.channels.ReadMessageContents(
-                    channel=channel_peer,
-                    id=[latest_message.id]
+        # Filter messages based on start_id or last_n_messages
+        if start_id is not None:
+            try:
+                start_index = all_message_ids.index(start_id)
+                all_message_ids = all_message_ids[:start_index + 1]
+            except ValueError:
+                print(f"{YELLOW}Start message ID {start_id} not found in channel{RESET}")
+                return
+        elif last_n_messages is not None:
+            all_message_ids = all_message_ids[:last_n_messages]
+        
+        # Process messages in batches with error handling
+        batch_size = 100
+        total_messages_processed = 0
+        
+        for i in range(0, len(all_message_ids), batch_size):
+            batch_ids = all_message_ids[i:i + batch_size]
+            
+            try:
+                # Mark messages as read in batches
+                client.invoke(
+                    functions.channels.ReadMessageContents(
+                        channel=client.resolve_peer(channel.id),  # Resolve channel peer
+                        id=batch_ids
+                    )
                 )
-            )
-            
-            # Also mark history as read
-            client.invoke(
-                functions.channels.ReadHistory(
-                    channel=channel_peer,
-                    max_id=latest_message.id
+                
+                # Increment view counts
+                client.invoke(
+                    functions.messages.GetMessagesViews(
+                        peer=client.resolve_peer(channel.id),
+                        id=batch_ids,
+                        increment=True
+                    )
                 )
+                
+                total_messages_processed += len(batch_ids)
+                print(f"{GREEN}{{ {total_messages_processed} messages marked as read }}{RESET} \n")
+                time.sleep(view_delay)  # Delay between views as per user input
+                
+            except FloodWait as e:
+                print(f"{YELLOW}Rate limited, waiting {e.x}s{RESET}")
+                time.sleep(e.x)
+                continue
+            except Exception as e:
+                print(f"{RED}Error processing batch: {str(e)}{RESET}")
+                continue
+        
+        # Mark entire history as read
+        client.invoke(
+            functions.channels.ReadHistory(
+                channel=client.resolve_peer(channel.id),
+                max_id=max(all_message_ids) if all_message_ids else 0
             )
+        )
             
-            client.invoke(functions.messages.GetMessagesViews(peer=channel_peer, id=[latest_message.id], increment=True))
-            print(f"{GREEN}Done{RESET}")
-        else:
-            print(f"{YELLOW}No messages found{RESET}")
-            
-    except FloodWait as e:
-        print(f"{YELLOW}Rate limited, waiting {e.x}s{RESET}")
-        time.sleep(e.x)
     except Exception as e:
         print(f"{RED}Failed: {str(e)}{RESET}")
-    time.sleep(2)
 
-
-
+def process_clients(clients, action, target, start_id=None, last_n_messages=None, view_delay=1):
+    """Process all clients with proper cleanup"""
+    if not clients:
+        print(f"{RED}No active clients available{RESET}")
+        return
+        
+    for client in clients:
+        if action == "mark_channel_as_read":
+            # Join the channel
+            join_channel_or_group(client, target)
+            mark_as_read(client, target, start_id, last_n_messages, view_delay)
 
 def main():
+    display_banner()  # Display the welcome banner
+    
+    load_api_credentials()
     load_accounts()
-    if not accounts:
+    
+    if not accounts or not api_credentials:
         return
 
     clients = []
-
+    
     while True:
-        print("\nOptions:")
-        print("1. Login Clients")
-        print("2. Join group")
-        print("3. Read chats")
-        print("4. Mark channel messages as read")
-        print("5. Send message to user")
-        print("6. Exit")
-        
-        choice = input("Enter your choice (1-6): ")
-        
-        if choice == "1":
-            # Login clients
-            print(f"\n{GREEN}Logging in all clients...{RESET}")
-            clients = login_all_clients()  # Log in clients manually
-            if clients:
-                print(f"{GREEN}All clients are logged in successfully.{RESET}")
+        try:
+            print("\nOptions:")
+            print("1. Login Clients")
+            print("2. Mark last X messages as read")
+            print("3. Mark messages as read from specific ID to latest")
+            print("4. Mark all channel messages as read")
+            print("5. Exit")
+            
+            choice = input("Enter your choice (1-5): ")
+            
+            if choice == "1":
+                print(f"\n{GREEN}Logging in all clients...{RESET}")
+                clients = login_all_clients()
+                if clients:
+                    print(f"{GREEN}All clients are logged in successfully.{RESET}")
+                else:
+                    print(f"{RED}No clients logged in.{RESET}")
+            elif choice == "2":
+                if len(clients) == 0:
+                    print(f"{YELLOW}Please execute option 1 first.{RESET}")
+                else:
+                    channel_link = input("Enter channel link or @ username: ")
+                    try:
+                        num_messages = int(input("Enter number of latest messages to mark as read: "))
+                        view_delay = float(input("Enter delay (in seconds) for each view increment (default is 1 second): ") or 1)
+                        process_clients(clients, "mark_channel_as_read", channel_link, None, num_messages, view_delay)
+                    except ValueError:
+                        print(f"{RED}Invalid number. Please enter a valid number.{RESET}")
+            elif choice == "3":
+                if len(clients) == 0:
+                    print(f"{YELLOW}Please execute option 1 first.{RESET}")
+                else:
+                    channel_link = input("Enter channel link or @ username: ")
+                    try:
+                        start_id = int(input("Enter the message ID to start from: "))
+                        view_delay = float(input("Enter delay (in seconds) for each view increment (default is 1 second): ") or 1)
+                        process_clients(clients, "mark_channel_as_read", channel_link, start_id, None, view_delay)
+                    except ValueError:
+                        print(f"{RED}Invalid message ID. Please enter a number.{RESET}")
+            elif choice == "4":
+                if len(clients) == 0:
+                    print(f"{YELLOW}Please execute option 1 first.{RESET}")
+                else:
+                    channel_link = input("Enter channel link or @ username: ")
+                    view_delay = float(input("Enter delay (in seconds) for each view increment (default is 1 second): ") or 1)
+                    process_clients(clients, "mark_channel_as_read", channel_link, None, None, view_delay)
+            elif choice == "5":
+                print(f"{GREEN}Cleaning up and exiting...{RESET}")
+                for client in clients:
+                    try:
+                        client.stop()
+                    except:
+                        pass
+                break
             else:
-                print(f"{RED}No clients logged in.{RESET}")
-        elif choice == "2":
-            print("Exiting...")
+                print(f"{YELLOW}Invalid choice. Please enter a number between 1 and 5.{RESET}")
+                
+        except KeyboardInterrupt:
+            print(f"\n{YELLOW}Interrupted by user. Cleaning up...{RESET}")
             for client in clients:
                 try:
                     client.stop()
                 except:
                     pass
             break
+        except Exception as e:
+            print(f"{RED}Unexpected error: {str(e)}{RESET}")
 
 if __name__ == "__main__":
     main()
