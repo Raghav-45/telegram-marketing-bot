@@ -1,2 +1,6 @@
 /sessions
 *.session
+/executable
+/build
+/dist
+main.spec
